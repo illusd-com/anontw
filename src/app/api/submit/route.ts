@@ -5,6 +5,7 @@ import {
   waitForCanvaAutofill,
   buildAutofillDataFromSubmission,
 } from "@/lib/canva";
+import { isOverlySexual } from "@/lib/moderation";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -36,7 +37,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Optional Canva autofill (text import → design)
+    // Reject overly explicit / pornographic content
+    const combined = `${title}\n${content}`;
+    if (isOverlySexual(combined)) {
+      return NextResponse.json(
+        { error: "內容過於色情，無法投稿" },
+        { status: 400 }
+      );
+    }
+
+    // Optional Canva autofill (text → design)
     let canvaResult: unknown = null;
     if (body.useCanva && process.env.CANVA_ACCESS_TOKEN && process.env.CANVA_BRAND_TEMPLATE_ID) {
       try {
@@ -50,13 +60,11 @@ export async function POST(req: NextRequest) {
           canvaResult = await waitForCanvaAutofill(jobId);
         }
       } catch (e) {
-        // Canva failure should not block Zernio publish
         console.error("Canva autofill failed:", e);
         canvaResult = { error: String(e) };
       }
     }
 
-    // Zernio publish
     const platforms = getConfiguredPlatforms();
     if (platforms.length === 0) {
       return NextResponse.json(
@@ -90,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      message: "投稿已送出並透過 Zernio 發布",
+      message: "投稿已送出",
       zernio: zernioResult,
       canva: canvaResult,
     });

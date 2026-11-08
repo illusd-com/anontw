@@ -40,7 +40,7 @@ export default function SubmitForm() {
       }
 
       setStatus("success");
-      setMessage(data.message || "投稿成功，已透過 Zernio 自動發布。");
+      setMessage(data.message || "投稿成功");
       setTitle("");
       setContent("");
       setUseCanva(false);
@@ -96,7 +96,7 @@ export default function SubmitForm() {
           className="h-4 w-4 rounded border-white/20 bg-anon-gray text-anon-green focus:ring-anon-green"
         />
         <label htmlFor="useCanva" className="text-sm text-anon-muted">
-          同時以 Canva 自動匯入文字產生設計（需已設定 Canva 環境變數）
+          Canva 自動匯入文字產生設計
         </label>
       </div>
 
@@ -105,7 +105,7 @@ export default function SubmitForm() {
         disabled={status === "loading"}
         className="w-full rounded-lg bg-anon-green px-6 py-3 font-medium text-black transition hover:bg-anon-accent disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {status === "loading" ? "送出中…" : "匿名投稿並自動發布"}
+        {status === "loading" ? "送出中…" : "匿名投稿"}
       </button>
 
       {status === "success" && (
