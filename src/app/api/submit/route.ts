@@ -1,27 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createZernioPost, getConfiguredPlatforms } from "@/lib/zernio";
-import {
-  createCanvaAutofillJob,
-  waitForCanvaAutofill,
-  buildAutofillDataFromSubmission,
-} from "@/lib/canva";
 import { isOverlySexual } from "@/lib/moderation";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type SubmitBody = {
-  title?: string;
   content: string;
-  useCanva?: boolean;
-  tags?: string[];
 };
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SubmitBody;
     const content = (body.content || "").trim();
-    const title = (body.title || "").trim();
 
     if (!content || content.length < 10) {
       return NextResponse.json(
@@ -37,40 +28,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Reject overly explicit / pornographic content
-    const combined = `${title}\n${content}`;
-    if (isOverlySexual(combined)) {
+    if (isOverlySexual(content)) {
       return NextResponse.json(
         { error: "內容過於色情，無法投稿" },
         { status: 400 }
       );
     }
 
-    // Optional Canva autofill (text → design)
-    let canvaResult: unknown = null;
-    if (body.useCanva && process.env.CANVA_ACCESS_TOKEN && process.env.CANVA_BRAND_TEMPLATE_ID) {
-      try {
-        const data = buildAutofillDataFromSubmission(title, content);
-        const job = await createCanvaAutofillJob(
-          process.env.CANVA_BRAND_TEMPLATE_ID,
-          data
-        );
-        const jobId = job?.job?.id;
-        if (jobId) {
-          canvaResult = await waitForCanvaAutofill(jobId);
-        }
-      } catch (e) {
-        console.error("Canva autofill failed:", e);
-        canvaResult = { error: String(e) };
-      }
-    }
-
     const platforms = getConfiguredPlatforms();
-    if (platforms.length === 0) {
+    // Prefer Threads + Instagram if configured; otherwise use all configured accounts
+    const preferred = platforms.filter((p) =>
+      ["threads", "instagram"].includes(p.platform.toLowerCase())
+    );
+    const targets = preferred.length > 0 ? preferred : platforms;
+
+    if (targets.length === 0) {
       return NextResponse.json(
         {
           error:
-            "尚未設定 ZERNIO_ACCOUNT_IDS。請在 Vercel 環境變數設定 platform:accountId 格式。",
+            "尚未設定 ZERNIO_ACCOUNT_IDS。請設定 threads:帳號ID,instagram:帳號ID",
         },
         { status: 503 }
       );
@@ -83,24 +59,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const postText = title ? `【${title}】\n\n${content}` : content;
-    const hashtags = ["匿名台灣", "AnonymousTaiwan", ...(body.tags || [])];
+    // Title fixed; body = submission content. Same text to all targets.
+    const postText = `【匿名台灣】\n\n${content}`;
 
     const zernioResult = await createZernioPost({
       content: postText,
-      title: title || undefined,
-      platforms,
+      title: "匿名台灣",
+      platforms: targets,
       publishNow: true,
       timezone: "Asia/Taipei",
-      hashtags,
-      tags: body.tags,
+      hashtags: ["匿名台灣", "AnonymousTaiwan"],
     });
 
     return NextResponse.json({
       ok: true,
       message: "投稿已送出",
       zernio: zernioResult,
-      canva: canvaResult,
     });
   } catch (err) {
     console.error("Submit error:", err);
